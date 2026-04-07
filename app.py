@@ -309,7 +309,6 @@ def render_results(df: pd.DataFrame) -> None:
                 <div class="result-main">
                     <div class="student-name">{row.student_name}</div>
                     <div class="student-phone">{row.phone}</div>
-                    <div class="student-hint">拼音首字母：{row.name_initials or '-'} | 全拼：{row.name_full_pinyin or '-'}</div>
                 </div>
             </div>
             """
@@ -349,7 +348,6 @@ def main() -> None:
         }
         .student-name { font-size: 1.35rem; font-weight: 800; color: #1f2937; }
         .student-phone { font-size: 1.05rem; margin-top: 4px; color: #b45309; font-weight: 700; }
-        .student-hint { font-size: 0.9rem; margin-top: 6px; color: #6b7280; }
         @media (max-width: 768px) {
             .block-container { padding-top: 1rem; padding-bottom: 1.25rem; padding-left: 0.8rem; padding-right: 0.8rem; }
             .hero { padding: 20px 18px; border-radius: 18px; }
@@ -359,7 +357,6 @@ def main() -> None:
             .id-badge { min-width: auto; width: 100%; font-size: 1.45rem; padding: 10px 8px; }
             .student-name { font-size: 1.2rem; }
             .student-phone { font-size: 1rem; word-break: break-all; }
-            .student-hint { line-height: 1.45; word-break: break-all; }
         }
         </style>
         """,
