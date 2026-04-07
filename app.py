@@ -203,6 +203,7 @@ def save_batch(uploaded_file, df: pd.DataFrame, upload_label: str) -> str:
     return batch_id
 
 
+@st.cache_data(show_spinner=False, ttl=3600)  # 缓存1小时
 def list_batches() -> list[BatchOption]:
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(
@@ -221,6 +222,7 @@ def list_batches() -> list[BatchOption]:
     ]
 
 
+@st.cache_data(show_spinner=False, ttl=3600)  # 缓存1小时
 def get_batch_meta(batch_id: str) -> dict[str, object] | None:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
@@ -300,10 +302,18 @@ def render_results(df: pd.DataFrame) -> None:
         st.warning("没有匹配到结果，请试试编号、姓名、拼音首字母或手机号片段。")
         return
 
-    styled_rows = []
+    # 限制显示结果数量，避免手机端渲染过多内容
+    max_results = 50
+    if len(df) > max_results:
+        df = df.head(max_results)
+        st.info(f"只显示前 {max_results} 条结果")
+
+    # 使用更简洁的HTML结构
+    result_html = "<div class='result-wrap'>"
     for row in df.itertuples(index=False):
-        styled_rows.append(f"<div class='result-card'><div class='id-badge'>{row.student_id}</div><div class='result-main'><div class='student-name'>{row.student_name}</div><div class='student-phone'>{row.phone}</div></div></div>")
-    st.markdown(f"<div class='result-wrap'>{''.join(styled_rows)}</div>", unsafe_allow_html=True)
+        result_html += f"<div class='result-card'><div class='id-badge'>{row.student_id}</div><div class='result-main'><div class='student-name'>{row.student_name}</div><div class='student-phone'>{row.phone}</div></div></div>"
+    result_html += "</div>"
+    st.markdown(result_html, unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -313,35 +323,42 @@ def main() -> None:
     st.markdown(
         """
         <style>
-        .stApp { background: linear-gradient(180deg, #f8f5ee 0%, #fffdfa 100%); }
-        .block-container { padding-top: 2rem; padding-bottom: 2rem; max-width: 1100px; }
+        /* 简化背景样式 */
+        .stApp { background-color: #f8f5ee; }
+        .block-container { padding-top: 1.5rem; padding-bottom: 1.5rem; max-width: 1000px; }
+        
+        /* 简化hero样式 */
         .hero {
-            background: linear-gradient(135deg, #1d3557 0%, #274c77 55%, #457b9d 100%);
-            border-radius: 22px; padding: 28px 30px; color: white; margin-bottom: 1rem;
-            box-shadow: 0 18px 45px rgba(29, 53, 87, 0.18);
+            background: linear-gradient(135deg, #1d3557 0%, #274c77 100%);
+            border-radius: 16px; padding: 20px 24px; color: white; margin-bottom: 1rem;
+            box-shadow: 0 8px 20px rgba(29, 53, 87, 0.15);
         }
-        .hero h1 { margin: 0 0 8px 0; font-size: 2.1rem; }
-        .result-wrap { display: grid; gap: 14px; margin-top: 8px; }
+        .hero h1 { margin: 0; font-size: 1.8rem; }
+        
+        /* 简化结果样式 */
+        .result-wrap { display: grid; gap: 10px; margin-top: 8px; }
         .result-card {
-            display: flex; gap: 16px; align-items: center; padding: 18px 20px;
-            background: white; border-radius: 18px; border: 1px solid #e8e2d6;
-            box-shadow: 0 10px 28px rgba(39, 76, 119, 0.08);
+            display: flex; gap: 12px; align-items: center; padding: 14px 16px;
+            background: white; border-radius: 12px; border: 1px solid #e8e2d6;
+            box-shadow: 0 4px 12px rgba(39, 76, 119, 0.05);
         }
         .id-badge {
-            min-width: 108px; text-align: center; font-weight: 900; font-size: 1.6rem;
-            color: #111; background: #ffe08a; border: 3px solid #101010; border-radius: 14px;
-            padding: 12px 10px; letter-spacing: 1px;
+            min-width: 90px; text-align: center; font-weight: 900; font-size: 1.4rem;
+            color: #111; background: #ffe08a; border: 2px solid #101010; border-radius: 10px;
+            padding: 8px 6px; letter-spacing: 1px;
         }
-        .student-name { font-size: 1.35rem; font-weight: 800; color: #1f2937; }
-        .student-phone { font-size: 1.05rem; margin-top: 4px; color: #b45309; font-weight: 700; }
+        .student-name { font-size: 1.2rem; font-weight: 700; color: #1f2937; }
+        .student-phone { font-size: 1rem; margin-top: 2px; color: #b45309; font-weight: 600; }
+        
+        /* 简化响应式样式 */
         @media (max-width: 768px) {
-            .block-container { padding-top: 1rem; padding-bottom: 1.25rem; padding-left: 0.8rem; padding-right: 0.8rem; }
-            .hero { padding: 20px 18px; border-radius: 18px; }
-            .hero h1 { font-size: 1.55rem; line-height: 1.2; }
-            .result-card { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 14px; border-radius: 16px; }
-            .id-badge { min-width: auto; width: 100%; font-size: 1.45rem; padding: 10px 8px; }
-            .student-name { font-size: 1.2rem; }
-            .student-phone { font-size: 1rem; word-break: break-all; }
+            .block-container { padding: 1rem 0.8rem; }
+            .hero { padding: 16px 16px; border-radius: 12px; }
+            .hero h1 { font-size: 1.4rem; }
+            .result-card { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 12px; border-radius: 10px; }
+            .id-badge { min-width: auto; width: 100%; font-size: 1.2rem; padding: 6px 4px; }
+            .student-name { font-size: 1.1rem; }
+            .student-phone { font-size: 0.95rem; word-break: break-all; }
         }
         </style>
         """,
