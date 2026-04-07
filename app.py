@@ -282,19 +282,31 @@ def search_records(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
 
 
 def render_stats(meta: dict[str, object]) -> None:
-    ranges = meta["id_ranges"]
+    batch_id = meta["batch_id"]
+    # 获取当前批次的实际数据量
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM records WHERE batch_id = ?",
+            (batch_id,)
+        )
+        actual_count = cursor.fetchone()[0]
+    
+    # 获取当前批次的所有学生ID，重新计算号段
+    records_df = load_batch_records(batch_id)
+    ranges = compute_id_ranges(records_df["student_id"])
+    
     st.markdown("### 本期信息")
-    st.markdown(f"本期数量：**{meta['row_count']} 条**")
+    st.markdown(f"本期数量：**{actual_count} 条**")
     st.markdown(f"上传日期：**{meta['upload_label']}**")
 
     if ranges:
-        st.markdown("主要连续号段：")
-        for index, item in enumerate(ranges[:2], start=1):
+        st.markdown("连续号段：")
+        for index, item in enumerate(ranges, start=1):
             st.markdown(
                 f"{index}. **{item['start']} - {item['end']}**，共 **{item['count']}** 个"
             )
     else:
-        st.markdown("主要连续号段：**未识别到连续号段**")
+        st.markdown("连续号段：**未识别到连续号段**")
 
 
 def render_results(df: pd.DataFrame) -> None:
@@ -462,10 +474,12 @@ def main() -> None:
                         # 过滤空字符串
                         parts = [p.strip() for p in parts if p.strip()]
                         if len(parts) >= 3:
+                            # 提取编号、姓名、手机号三项
                             student_id = normalize_digits(parts[0])
                             student_name = normalize_name(parts[1])
                             phone = normalize_digits(parts[2])
                             if student_id and student_name and phone:
+                                # 确保编号是四位数字
                                 student_id = student_id.zfill(4)
                                 name_initials, name_full_pinyin = build_pinyin_fields(student_name)
                                 searchable_text = make_searchable_text(student_id, student_name, phone, name_initials, name_full_pinyin)
