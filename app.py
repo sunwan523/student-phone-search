@@ -8,7 +8,7 @@ import re
 # -------------------------- 配置 & 数据结构 --------------------------
 st.set_page_config(page_title="数据查询系统", page_icon="📊", layout="wide")
 
-# 固定密码
+# 固定管理员密码
 ADMIN_PASSWORD = "523626"
 
 @dataclass
@@ -22,6 +22,9 @@ if "batches" not in st.session_state:
     st.session_state.batches = []
 if "data_map" not in st.session_state:
     st.session_state.data_map = {}
+# 搜索状态持久化
+if "search_key" not in st.session_state:
+    st.session_state.search_key = ""
 
 # -------------------------- 核心工具函数 --------------------------
 def list_batches() -> List[BatchOption]:
@@ -128,7 +131,7 @@ def render_stats(meta: dict[str, Any]) -> None:
         st.markdown("主要连续号段：**未识别到连续号段**")
 
 def render_results(df: pd.DataFrame, search_key: str = "") -> None:
-    """渲染结果列表（支持搜索过滤）"""
+    """渲染结果列表（支持搜索过滤，点击按钮后触发）"""
     st.markdown("### 数据列表")
     
     # 搜索过滤
@@ -162,7 +165,7 @@ def render_results(df: pd.DataFrame, search_key: str = "") -> None:
     
     st.markdown(f'<div class="result-wrap">{"".join(styled_html)}</div>', unsafe_allow_html=True)
 
-# -------------------------- 页面样式 --------------------------
+# -------------------------- 页面样式（完全保留原样式） --------------------------
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(180deg, #f8f5ee 0%, #fffdfa 100%); }
@@ -193,6 +196,12 @@ st.markdown("""
 }
 .student-name { font-size: 1.35rem; font-weight: 800; color: #1f2937; }
 .student-phone { font-size: 1.05rem; margin-top: 4px; color: #b45309; font-weight: 700; }
+/* 搜索按钮样式优化 */
+.stButton > button {
+    border-radius: 12px;
+    font-weight: 700;
+    height: 48px;
+}
 @media (max-width: 768px) {
     .block-container { padding-top: 1rem; padding-bottom: 1.25rem; padding-left: 0.8rem; padding-right: 0.8rem; }
     .hero { padding: 20px 18px; border-radius: 18px; }
@@ -216,9 +225,20 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ====================== 【查找功能移到最顶部】 ======================
+    # ====================== 【查找功能置顶 + 新增搜索按钮】 ======================
     st.markdown("### 🔍 全局搜索")
-    search_key = st.text_input("输入编号/姓名/电话搜索", placeholder="支持模糊搜索", label_visibility="collapsed")
+    # 搜索输入框 + 按钮布局
+    col_search, col_btn = st.columns([8, 1], gap="small")
+    with col_search:
+        search_input = st.text_input(
+            "输入编号/姓名/电话搜索",
+            value=st.session_state.search_key,
+            placeholder="请输入搜索内容",
+            label_visibility="collapsed"
+        )
+    with col_btn:
+        if st.button("🔍 搜索", type="primary", use_container_width=True):
+            st.session_state.search_key = search_input.strip()
     st.divider()
 
     # 左右分栏
@@ -226,6 +246,12 @@ def main():
 
     with left:
         st.markdown("### 📁 Excel数据上传")
+        # 【新增：Excel上传密码验证】
+        upload_password = st.text_input(
+            "请输入管理员密码",
+            type="password",
+            placeholder="请输入管理员密码"
+        )
         uploaded_file = st.file_uploader("选择Excel文件", type=["xlsx", "xls"])
         if uploaded_file:
             try:
@@ -236,16 +262,25 @@ def main():
                 else:
                     upload_label = st.text_input("数据日期标识", value=datetime.now().strftime("%Y-%m-%d"))
                     if st.button("✅ 确认上传", type="primary"):
-                        save_batch_data(df, upload_label)
-                        list_batches_cached.clear()
-                        st.success("Excel上传成功！")
+                        # 先验证密码，正确才允许上传
+                        if upload_password != ADMIN_PASSWORD:
+                            st.error("❌ 密码错误，无法上传！")
+                        else:
+                            save_batch_data(df, upload_label)
+                            list_batches_cached.clear()
+                            st.success("Excel上传成功！")
             except Exception as e:
                 st.error(f"文件解析失败：{str(e)}")
 
         st.divider()
-        # ====================== 【新增：文本框追加数据 + 密码验证】 ======================
+        # ====================== 【文本追加数据 + 密码隐藏优化】 ======================
         st.markdown("### ➕ 文本追加数据")
-        password = st.text_input("请输入管理员密码", type="password", placeholder="密码：523626")
+        # 【修复：密码彻底隐藏，不显示明文】
+        append_password = st.text_input(
+            "请输入管理员密码",
+            type="password",
+            placeholder="请输入管理员密码"
+        )
         text_input = st.text_area(
             "粘贴数据（一行一条，逗号/空格分隔，自动忽略序号）",
             height=150,
@@ -253,7 +288,7 @@ def main():
         )
         if st.button("💾 保存追加数据", type="primary"):
             # 1. 密码校验
-            if password != ADMIN_PASSWORD:
+            if append_password != ADMIN_PASSWORD:
                 st.error("❌ 密码错误，无法保存！")
             # 2. 数据校验
             elif not text_input.strip():
@@ -294,12 +329,12 @@ def main():
         if not selected_batch_id:
             st.info("👈 请先上传数据并选择批次")
         else:
-            # 渲染数据 + 搜索过滤
+            # 渲染数据 + 搜索过滤（使用session_state中的搜索词）
             meta = get_batch_meta(selected_batch_id)
             df = get_batch_data(selected_batch_id)
             render_stats(meta)
             st.divider()
-            render_results(df, search_key)
+            render_results(df, st.session_state.search_key)
 
 if __name__ == "__main__":
     main()
