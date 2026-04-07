@@ -302,21 +302,8 @@ def render_results(df: pd.DataFrame) -> None:
 
     styled_rows = []
     for row in df.itertuples(index=False):
-        styled_rows.append(
-            f"""
-            <div class="result-card">
-                <div class="id-badge">{row.student_id}</div>
-                <div class="result-main">
-                    <div class="student-name">{row.student_name}</div>
-                    <div class="student-phone">{row.phone}</div>
-                </div>
-            </div>
-            """
-        )
-    st.markdown(
-        f"<div class='result-wrap'>{''.join(styled_rows)}</div>",
-        unsafe_allow_html=True,
-    )
+        styled_rows.append(f"<div class='result-card'><div class='id-badge'>{row.student_id}</div><div class='result-main'><div class='student-name'>{row.student_name}</div><div class='student-phone'>{row.phone}</div></div></div>")
+    st.markdown(f"<div class='result-wrap'>{''.join(styled_rows)}</div>", unsafe_allow_html=True)
 
 
 def main() -> None:
