@@ -393,13 +393,6 @@ def main() -> None:
         st.write(f"匹配结果：{len(result_df)} 条")
         render_results(result_df)
 
-    with st.expander("查看本期原始数据"):
-        st.dataframe(
-            records_df[["student_id", "student_name", "phone"]],
-            use_container_width=True,
-            hide_index=True,
-        )
-
     st.divider()
 
     # 左侧上传和补充信息区域
