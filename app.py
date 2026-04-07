@@ -274,8 +274,6 @@ def search_records(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
     phone_match = False
     if len(digits_only) >= 3:
         phone_match = df["phone"].str.contains(digits_only, case=False, na=False)
-    elif digits_only:
-        phone_match = df["phone"] == digits_only
 
     mask = id_match | name_match | initials_match | pinyin_match | phone_match
     return df[mask].copy()
@@ -283,17 +281,18 @@ def search_records(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
 
 def render_stats(meta: dict[str, object]) -> None:
     ranges = meta["id_ranges"]
-    col1, col2, col3 = st.columns([1, 1, 2])
-    col1.metric("本期数量", f"{meta['row_count']} 条")
-    col2.metric("上传日期", str(meta["upload_label"]))
+    st.markdown("### 本期信息")
+    st.markdown(f"本期数量：**{meta['row_count']} 条**")
+    st.markdown(f"上传日期：**{meta['upload_label']}**")
+
     if ranges:
-        top_two = ranges[:2]
-        summary = " / ".join(
-            f"{item['start']}-{item['end']} ({item['count']}个)" for item in top_two
-        )
+        st.markdown("主要连续号段：")
+        for index, item in enumerate(ranges[:2], start=1):
+            st.markdown(
+                f"{index}. **{item['start']} - {item['end']}**，共 **{item['count']}** 个"
+            )
     else:
-        summary = "未识别到连续号段"
-    col3.metric("主要连续号段", summary)
+        st.markdown("主要连续号段：**未识别到连续号段**")
 
 
 def render_results(df: pd.DataFrame) -> None:
@@ -315,7 +314,10 @@ def render_results(df: pd.DataFrame) -> None:
             </div>
             """
         )
-    st.markdown(f"<div class='result-wrap'>{''.join(styled_rows)}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='result-wrap'>{''.join(styled_rows)}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def main() -> None:
@@ -348,6 +350,17 @@ def main() -> None:
         .student-name { font-size: 1.35rem; font-weight: 800; color: #1f2937; }
         .student-phone { font-size: 1.05rem; margin-top: 4px; color: #b45309; font-weight: 700; }
         .student-hint { font-size: 0.9rem; margin-top: 6px; color: #6b7280; }
+        @media (max-width: 768px) {
+            .block-container { padding-top: 1rem; padding-bottom: 1.25rem; padding-left: 0.8rem; padding-right: 0.8rem; }
+            .hero { padding: 20px 18px; border-radius: 18px; }
+            .hero h1 { font-size: 1.55rem; line-height: 1.2; }
+            .hero p { font-size: 0.95rem; line-height: 1.5; }
+            .result-card { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 14px; border-radius: 16px; }
+            .id-badge { min-width: auto; width: 100%; font-size: 1.45rem; padding: 10px 8px; }
+            .student-name { font-size: 1.2rem; }
+            .student-phone { font-size: 1rem; word-break: break-all; }
+            .student-hint { line-height: 1.45; word-break: break-all; }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -368,9 +381,12 @@ def main() -> None:
     with left:
         st.subheader("上传新批次")
         upload_label = st.date_input("这次数据日期", value=datetime.now().date(), format="YYYY-MM-DD")
+        upload_password = st.text_input("上传密码", type="password", placeholder="请输入上传密码")
         uploaded_file = st.file_uploader("上传 Excel 文件", type=["xlsx", "xls"])
         if st.button("保存本次上传", type="primary", use_container_width=True):
-            if uploaded_file is None:
+            if upload_password != "523626":
+                st.error("上传密码错误，未接受数据，也不会进行整理。")
+            elif uploaded_file is None:
                 st.error("请先选择一个 Excel 文件。")
             else:
                 try:
@@ -410,7 +426,7 @@ def main() -> None:
 
         query = st.text_input(
             "开始查询",
-            placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号后三位以上",
+            placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号任意连续3位以上",
         )
 
         records_df = load_batch_records(selected_batch_id)
