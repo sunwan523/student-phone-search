@@ -215,7 +215,7 @@ def list_batches() -> list[BatchOption]:
     return [
         BatchOption(
             batch_id=row[0],
-            label=f"{row[1]} | {row[2][:16].replace('T', ' ')} | {row[3]}条 | {row[0][-4:]}  ",
+            label=f"{row[1]} | {row[2][:16].replace('T', ' ')} | {row[3]}条 | {row[0][-4:]}",
         )
         for row in rows
     ]
@@ -321,7 +321,6 @@ def main() -> None:
             box-shadow: 0 18px 45px rgba(29, 53, 87, 0.18);
         }
         .hero h1 { margin: 0 0 8px 0; font-size: 2.1rem; }
-        .hero p { margin: 0; font-size: 1rem; opacity: 0.92; }
         .result-wrap { display: grid; gap: 14px; margin-top: 8px; }
         .result-card {
             display: flex; gap: 16px; align-items: center; padding: 18px 20px;
@@ -339,7 +338,6 @@ def main() -> None:
             .block-container { padding-top: 1rem; padding-bottom: 1.25rem; padding-left: 0.8rem; padding-right: 0.8rem; }
             .hero { padding: 20px 18px; border-radius: 18px; }
             .hero h1 { font-size: 1.55rem; line-height: 1.2; }
-            .hero p { font-size: 0.95rem; line-height: 1.5; }
             .result-card { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 14px; border-radius: 16px; }
             .id-badge { min-width: auto; width: 100%; font-size: 1.45rem; padding: 10px 8px; }
             .student-name { font-size: 1.2rem; }
@@ -354,7 +352,6 @@ def main() -> None:
         """
         <div class="hero">
             <h1>学生手机查询系统</h1>
-            <p>支持编号、姓名、单字、拼音首字母、手机号片段查询。每次上传独立保存，默认查询最近一次上传的数据。</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -380,15 +377,21 @@ def main() -> None:
         st.error("批次信息不存在。")
         return
 
-    query = st.text_input(
-        "开始查询",
-        placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号任意连续3位以上",
-    )
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        query = st.text_input(
+            "开始查询",
+            placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号任意连续3位以上",
+        )
+    with col2:
+        search_button = st.button("查询", type="primary")
 
     records_df = load_batch_records(selected_batch_id)
-    result_df = search_records(records_df, query)
-    st.write(f"匹配结果：{len(result_df)} 条")
-    render_results(result_df)
+    
+    if search_button:
+        result_df = search_records(records_df, query)
+        st.write(f"匹配结果：{len(result_df)} 条")
+        render_results(result_df)
 
     with st.expander("查看本期原始数据"):
         st.dataframe(
