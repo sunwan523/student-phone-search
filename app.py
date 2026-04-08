@@ -54,6 +54,7 @@ def ensure_storage() -> None:
                 name_initials TEXT NOT NULL,
                 name_full_pinyin TEXT NOT NULL,
                 searchable_text TEXT NOT NULL,
+                remark TEXT DEFAULT '',
                 PRIMARY KEY (batch_id, student_id, phone, student_name),
                 FOREIGN KEY (batch_id) REFERENCES batches(batch_id)
             )
@@ -183,8 +184,8 @@ def save_batch(uploaded_file, df: pd.DataFrame, upload_label: str) -> str:
             """
             INSERT INTO records (
                 batch_id, student_id, student_name, phone,
-                name_initials, name_full_pinyin, searchable_text
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                name_initials, name_full_pinyin, searchable_text, remark
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -195,6 +196,7 @@ def save_batch(uploaded_file, df: pd.DataFrame, upload_label: str) -> str:
                     row.name_initials,
                     row.name_full_pinyin,
                     row.searchable_text,
+                    ""
                 )
                 for row in df.itertuples(index=False)
             ],
@@ -250,7 +252,7 @@ def load_batch_records(batch_id: str) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(
             """
-            SELECT student_id, student_name, phone, name_initials, name_full_pinyin
+            SELECT student_id, student_name, phone, name_initials, name_full_pinyin, remark
             FROM records
             WHERE batch_id = ?
             ORDER BY CAST(student_id AS INTEGER), student_name
@@ -320,12 +322,69 @@ def render_results(df: pd.DataFrame) -> None:
         df = df.head(max_results)
         st.info(f"只显示前 {max_results} 条结果")
 
-    # 使用更简洁的HTML结构
-    result_html = "<div class='result-wrap'>"
-    for row in df.itertuples(index=False):
-        result_html += f"<div class='result-card'><div class='id-badge'>{row.student_id}</div><div class='result-main'><div class='student-name'>{row.student_name}</div><div class='student-phone'>{row.phone}</div></div></div>"
-    result_html += "</div>"
-    st.markdown(result_html, unsafe_allow_html=True)
+    # 为每条记录显示卡片和按钮
+    for i, row in enumerate(df.itertuples(index=False)):
+        # 生成唯一的键
+        record_key = f"{row.student_id}_{row.student_name}_{row.phone}"
+        
+        # 显示记录卡片
+        st.markdown(
+            f"""
+            <div class='result-card'>
+                <div class='id-badge'>{row.student_id}</div>
+                <div class='result-main'>
+                    <div class='student-name'>{row.student_name}</div>
+                    <div class='student-phone'>{row.phone}</div>
+                    {'<div class="student-remark">' + row.remark + '</div>' if row.remark else ''}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # 显示操作按钮
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button(f"已取走", key=f"take_{record_key}"):
+                # 添加备注
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                new_remark = f"{row.remark} 已于 {current_time} 取走" if row.remark else f"已于 {current_time} 取走"
+                # 更新数据库
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute(
+                        """
+                        UPDATE records
+                        SET remark = ?
+                        WHERE student_id = ? AND student_name = ? AND phone = ?
+                        """,
+                        (new_remark, row.student_id, row.student_name, row.phone)
+                    )
+                    conn.commit()
+                # 清除缓存
+                load_batch_records.clear()
+                st.success(f"已标记 {row.student_name} 为取走")
+        
+        with col2:
+            if st.button(f"已存回", key=f"return_{record_key}"):
+                # 添加备注
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                new_remark = f"{row.remark} 已于 {current_time} 存回" if row.remark else f"已于 {current_time} 存回"
+                # 更新数据库
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute(
+                        """
+                        UPDATE records
+                        SET remark = ?
+                        WHERE student_id = ? AND student_name = ? AND phone = ?
+                        """,
+                        (new_remark, row.student_id, row.student_name, row.phone)
+                    )
+                    conn.commit()
+                # 清除缓存
+                load_batch_records.clear()
+                st.success(f"已标记 {row.student_name} 为存回")
+        
+        st.markdown("---")
 
 
 def main() -> None:
@@ -361,6 +420,7 @@ def main() -> None:
         }
         .student-name { font-size: 1.2rem; font-weight: 700; color: #1f2937; }
         .student-phone { font-size: 1rem; margin-top: 2px; color: #b45309; font-weight: 600; }
+        .student-remark { font-size: 0.9rem; margin-top: 4px; color: #6b7280; font-style: italic; }
         
         /* 简化响应式样式 */
         @media (max-width: 768px) {
@@ -371,6 +431,7 @@ def main() -> None:
             .id-badge { min-width: auto; width: 100%; font-size: 1.2rem; padding: 6px 4px; }
             .student-name { font-size: 1.1rem; }
             .student-phone { font-size: 0.95rem; word-break: break-all; }
+            .student-remark { font-size: 0.85rem; margin-top: 3px; }
         }
         </style>
         """,
@@ -492,10 +553,10 @@ def main() -> None:
                                 """
                                 INSERT OR IGNORE INTO records (
                                     batch_id, student_id, student_name, phone,
-                                    name_initials, name_full_pinyin, searchable_text
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                                    name_initials, name_full_pinyin, searchable_text, remark
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                                 """,
-                                new_records
+                                [record + ("",) for record in new_records]
                             )
                             conn.commit()
                         load_batch_records.clear()
