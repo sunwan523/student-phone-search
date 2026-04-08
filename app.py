@@ -402,7 +402,7 @@ def load_batch_records(batch_id: str) -> pd.DataFrame:
 def search_records(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
     keyword = keyword.strip().lower()
     if not keyword:
-        return df
+        return df.iloc[0:0]  # 返回空DataFrame
 
     compact = re.sub(r"\s+", "", keyword)
     digits_only = "".join(ch for ch in compact if ch.isdigit())
@@ -518,6 +518,7 @@ def main() -> None:
     if not batches:
         st.info("还没有批次数据，请先上传 Excel。")
 
+    selected_batch_id = None
     if batches:
         selected_label = st.selectbox(
             "查询哪次上传的数据",
@@ -531,15 +532,18 @@ def main() -> None:
         if meta is None:
             st.error("批次信息不存在。")
         else:
-            # 输入框和按钮在同一列，按钮在输入框下方
-            query = st.text_input(
-                "开始查询",
-                placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号任意连续3位以上",
-            )
-            search_button = st.button("查询", type="primary", use_container_width=True)
+            # 使用表单实现回车键查询
+            with st.form(key='search_form'):
+                query = st.text_input(
+                    "开始查询",
+                    placeholder="输入编号 / 姓名 / 单字 / 拼音首字母 / 全拼 / 手机号任意连续3位以上",
+                    key="search_input"
+                )
+                search_button = st.form_submit_button("查询", type="primary", use_container_width=True)
 
             records_df = load_batch_records(selected_batch_id)
             
+            # 当点击按钮或按回车键时执行查询
             if search_button:
                 result_df = search_records(records_df, query)
                 st.write(f"匹配结果：{len(result_df)} 条")
@@ -683,6 +687,49 @@ def main() -> None:
                         st.error(f"删除失败：{exc}")
         else:
             st.info("没有可删除的批次数据。")
+
+        st.divider()
+        
+        st.subheader("导出数据")
+        export_password = st.text_input("导出密码", type="password", placeholder="请输入导出密码")
+        if st.button("导出本期全部数据", type="primary", use_container_width=True):
+            if export_password != "523626":
+                st.error("导出密码错误，无法导出数据。")
+            elif not selected_batch_id:
+                st.error("请先选择一个批次。")
+            else:
+                try:
+                    # 加载当前批次的所有数据
+                    records_df = load_batch_records(selected_batch_id)
+                    if records_df.empty:
+                        st.warning("当前批次没有数据可导出。")
+                    else:
+                        # 准备导出数据，只保留编号、姓名、手机号三列
+                        export_df = records_df[['student_id', 'student_name', 'phone']].copy()
+                        export_df.columns = ['编号', '姓名', '手机号']
+                        
+                        # 生成Excel文件
+                        import io
+                        output = io.BytesIO()
+                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                            export_df.to_excel(writer, index=False, sheet_name='学生数据')
+                        output.seek(0)
+                        
+                        # 获取当前批次的标签作为文件名的一部分
+                        meta = get_batch_meta(selected_batch_id)
+                        batch_label = meta['upload_label'] if meta else '未知批次'
+                        filename = f"学生数据_{batch_label}.xlsx"
+                        
+                        # 提供下载链接
+                        st.download_button(
+                            label="下载Excel文件",
+                            data=output,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        st.success("数据导出成功，请点击上方按钮下载Excel文件。")
+                except Exception as exc:
+                    st.error(f"导出失败：{exc}")
 
     with right:
         if meta:
