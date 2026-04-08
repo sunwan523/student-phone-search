@@ -250,9 +250,10 @@ def get_batch_meta(batch_id: str) -> dict[str, object] | None:
 @st.cache_data(show_spinner=False)
 def load_batch_records(batch_id: str) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
+        # 只查询必要的字段，不包含remark
         df = pd.read_sql_query(
             """
-            SELECT student_id, student_name, phone, name_initials, name_full_pinyin, remark
+            SELECT student_id, student_name, phone, name_initials, name_full_pinyin
             FROM records
             WHERE batch_id = ?
             ORDER BY CAST(student_id AS INTEGER), student_name
@@ -260,6 +261,9 @@ def load_batch_records(batch_id: str) -> pd.DataFrame:
             conn,
             params=(batch_id,),
         )
+    # 添加remark列，默认值为空字符串
+    if 'remark' not in df.columns:
+        df['remark'] = ''
     return df
 
 
@@ -294,8 +298,17 @@ def render_stats(meta: dict[str, object]) -> None:
         actual_count = cursor.fetchone()[0]
     
     # 获取当前批次的所有学生ID，重新计算号段
-    records_df = load_batch_records(batch_id)
-    ranges = compute_id_ranges(records_df["student_id"])
+    # 直接从数据库查询，避免使用load_batch_records
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(
+            "SELECT student_id FROM records WHERE batch_id = ?",
+            (batch_id,)
+        )
+        student_ids = [row[0] for row in cursor.fetchall()]
+    # 转换为Series
+    import pandas as pd
+    student_ids_series = pd.Series(student_ids)
+    ranges = compute_id_ranges(student_ids_series)
     
     st.markdown("### 本期信息")
     st.markdown(f"本期数量：**{actual_count} 条**")
@@ -349,16 +362,34 @@ def render_results(df: pd.DataFrame) -> None:
                 # 添加备注
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 new_remark = f"{row.remark} 已于 {current_time} 取走" if row.remark else f"已于 {current_time} 取走"
-                # 更新数据库
+                # 更新数据库，先检查remark字段是否存在
                 with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute(
-                        """
-                        UPDATE records
-                        SET remark = ?
-                        WHERE student_id = ? AND student_name = ? AND phone = ?
-                        """,
-                        (new_remark, row.student_id, row.student_name, row.phone)
-                    )
+                    # 检查remark字段是否存在
+                    cursor = conn.execute("PRAGMA table_info(records)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    
+                    if "remark" in columns:
+                        # 如果存在remark字段，直接更新
+                        conn.execute(
+                            """
+                            UPDATE records
+                            SET remark = ?
+                            WHERE student_id = ? AND student_name = ? AND phone = ?
+                            """,
+                            (new_remark, row.student_id, row.student_name, row.phone)
+                        )
+                    else:
+                        # 如果不存在remark字段，先添加
+                        conn.execute("ALTER TABLE records ADD COLUMN remark TEXT DEFAULT ''")
+                        # 然后更新
+                        conn.execute(
+                            """
+                            UPDATE records
+                            SET remark = ?
+                            WHERE student_id = ? AND student_name = ? AND phone = ?
+                            """,
+                            (new_remark, row.student_id, row.student_name, row.phone)
+                        )
                     conn.commit()
                 # 清除缓存
                 load_batch_records.clear()
@@ -369,16 +400,34 @@ def render_results(df: pd.DataFrame) -> None:
                 # 添加备注
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 new_remark = f"{row.remark} 已于 {current_time} 存回" if row.remark else f"已于 {current_time} 存回"
-                # 更新数据库
+                # 更新数据库，先检查remark字段是否存在
                 with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute(
-                        """
-                        UPDATE records
-                        SET remark = ?
-                        WHERE student_id = ? AND student_name = ? AND phone = ?
-                        """,
-                        (new_remark, row.student_id, row.student_name, row.phone)
-                    )
+                    # 检查remark字段是否存在
+                    cursor = conn.execute("PRAGMA table_info(records)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    
+                    if "remark" in columns:
+                        # 如果存在remark字段，直接更新
+                        conn.execute(
+                            """
+                            UPDATE records
+                            SET remark = ?
+                            WHERE student_id = ? AND student_name = ? AND phone = ?
+                            """,
+                            (new_remark, row.student_id, row.student_name, row.phone)
+                        )
+                    else:
+                        # 如果不存在remark字段，先添加
+                        conn.execute("ALTER TABLE records ADD COLUMN remark TEXT DEFAULT ''")
+                        # 然后更新
+                        conn.execute(
+                            """
+                            UPDATE records
+                            SET remark = ?
+                            WHERE student_id = ? AND student_name = ? AND phone = ?
+                            """,
+                            (new_remark, row.student_id, row.student_name, row.phone)
+                        )
                     conn.commit()
                 # 清除缓存
                 load_batch_records.clear()
